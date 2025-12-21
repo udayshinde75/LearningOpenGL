@@ -23,8 +23,6 @@ const char* FragmentShaderSource =
     "   FragColor = vec4(vColor, 1.0);\n"
     "}\n";
 
-GLFWwindow* GetWindow();
-
 int main() {
     cout << "Initiating GLFW" << endl;
     glfwInit();
