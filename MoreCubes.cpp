@@ -119,7 +119,7 @@ int main()
 
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH,SCR_HEIGHT,"10 Cubes",nullptr,nullptr);
     glfwMakeContextCurrent(window);
-    gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+    gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
 
     int fbWidth, fbHeight;
     glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
