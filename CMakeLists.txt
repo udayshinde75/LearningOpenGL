@@ -6,7 +6,10 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(glfw3 REQUIRED)
 find_library(OpenGL_LIBRARY OpenGL)
 
-include_directories(glad/include)
+
+include_directories(
+        glad/include
+)
 
 add_executable(OpenGLWindow
         main.cpp
