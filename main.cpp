@@ -4,10 +4,14 @@
 #include <glm/detail/setup.hpp>
 #include <glm/glm.hpp>
 #include "glad/glad.h"
+#include <GLFW/glfw3.h>
 #include "glm/gtc/matrix_transform.hpp"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 using namespace std;
 using namespace glm;
-// Shader helpers : ----
+/// Shader helpers : ---- (start)
 int success;
 char infoLog[512];
 
@@ -45,6 +49,7 @@ GLuint createProgram(const char* vertexSource, const char* fragmentSource) {
     }
     return  program;
 }
+/// Shader helpers : ---- (end)
 
 /// Camera Structure consisting imp camera properties
 struct Camera {
@@ -229,9 +234,183 @@ void main()
     FragColor = vec4(result, 1.0);
 }
 )";
-/// Shader to render objects in environment with attenuation ---- (start)
+/// Shader to render objects in environment with attenuation ---- (end)
 
+/// Shader to render a cube map -------- (start)
+const char* cubeMapVertexShader = R"(
+#version 410 core
+layout (location = 0) in vec3 aPos;
+out vec3 TexCoord;
+
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    TexCoord = aPos;
+    mat4 rotView = mat4(mat3(view));
+    vec4 pos = projection * rotView * vec4(aPos, 1.0);
+    gl_Position = pos.xyww;
+}
+)";
+
+const char* cubeMapFragmentShader = R"(
+#version 410 core;
+in vec3 TexCoord;
+ot vec4 FragColor;
+uniform samplerCube skybox;
+
+void main()
+{
+    FragColor = texture(skybox, TexCoord);
+)";
+/// Shader to render a cube map -------- (end)
+
+/// Shader to render a light cube ------ (start)
+const char* lightCubeVertexShader = R"(
+#version 410 core
+layout (location = 0) in vec3 aPos;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+void main()
+{
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+}
+)";
+
+const char* lightCubeFragmentShader = R"(
+#version 410 core
+out vec4 FragColor;
+uniform vec3 lightColor;
+void main()
+{
+    FragColor = vec4(lightColor, 1.0);
+}
+)";
+/// Shader to render a light cube ------ (end)
+
+/// Texture helpers ---------- (start)
+GLuint loadTexture(const char* path) {
+    GLuint texture;
+    glGenTextures(1, &texture);
+    int width, height, channels;
+    unsigned char* data = stbi_load(path, &width, &height, &channels, 0);
+    if (data) {
+        GLenum format = GL_RGBA;
+        if (channels == 1) { format = GL_RED; }
+        else if (channels == 3) { format = GL_RGB; }
+        else if (channels == 4) { format = GL_RGBA; }
+
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    } else {
+        std::cout << "Failed to load texture" << std::endl;
+    }
+
+    stbi_image_free(data);
+    return texture;
+}
+
+GLuint loadCubeMap(std::vector<std::string> faces)
+{
+    GLuint texID;
+    glGenTextures(1, &texID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texID);
+
+    int w, h, ch;
+    for (unsigned int i = 0; i < faces.size(); i++) {
+        unsigned char* data = stbi_load(faces[i].c_str(), &w, &h, &ch, 0);
+        if (!data) {
+            std::cout << "Failed to load cubemap: " << faces[i] << std::endl;
+            continue;
+        }
+        GLenum format = (ch == 4) ? GL_RGBA : GL_RGB;
+
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                     0, format, w, h, 0, format, GL_UNSIGNED_BYTE, data);
+        stbi_image_free(data);
+    }
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    return texID;
+}
+/// Texture helpers ---------- (end)
+
+
+
+/// App Global --- (start)
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+
+Camera camera;
+float lastX = SCR_WIDTH / 2.0f;
+float lastY = SCR_HEIGHT / 2.0f;
+bool firstMouse = true;
+
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
+
+glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
+/// App Global --- (end)
+
+/// Callbacks ---- (start)
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void mouse_callback(GLFWwindow* window, GLdouble xPos, GLdouble yPos);
+void scroll_callback(GLFWwindow* window, GLdouble xOffset, GLdouble yOffset);
+void ProcessInput(GLFWwindow* window);
+/// Callbacks ---- (end)
 
 int main() {
 
+}
+
+void ProcessInput(GLFWwindow *window)
+{
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        cameraProcessKeyboard(&camera, forwardDir, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        cameraProcessKeyboard(&camera, backwardDir, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        cameraProcessKeyboard(&camera, leftDir, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        cameraProcessKeyboard(&camera, rightDir, deltaTime);
+}
+
+void framebuffer_size_callback(GLFWwindow* window, const int width, const int height)
+{
+    glViewport(0, 0, width, height);
+}
+
+void mouse_callback(GLFWwindow* window, const double xPos, const double yPos)
+{
+    const auto xpos = static_cast<float>(xPos);
+    const auto ypos = static_cast<float>(yPos);
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+    float xOffset = xpos - lastX;
+    float yOffset = lastY - ypos; // reversed
+    lastX = xpos;
+    lastY = ypos;
+    cameraProcessMouseMovement(&camera, xOffset, yOffset);
+}
+
+void scroll_callback(GLFWwindow*, double, const double yOffset)
+{
+    cameraProcessMouseScroll(&camera, static_cast<float>(yOffset));
 }
