@@ -1,1 +1,1 @@
-// Will learn something new here
+// Learning something new here
