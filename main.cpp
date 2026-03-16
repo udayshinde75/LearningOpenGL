@@ -155,7 +155,7 @@ class Shader {
         glUniform3fv(glGetUniformLocation(ProgramID, uniform), 1, glm::value_ptr(vec));
     }
 
-    // Sets a float uniform (shininess, attenuation values, time, etc).
+    // Sets a float uniform (shininess, attenuation values, time, etc.).
     void setFloat(const char* uniform, const float val) const {
         glUniform1f(glGetUniformLocation(ProgramID, uniform), val);
     }
@@ -175,4 +175,79 @@ class Shader {
 };
 
 /// Implementing shader class --------------------- (end)
+
+
+/// Creating procedural texture ------------------ (start)
+class Texture {
+    // OpenGL texture handle — 0 = invalid/uninitialized
+    GLuint TextureID = 0;
+    public:
+    Texture() {
+        glGenTextures(1, &TextureID);
+        glBindTexture(GL_TEXTURE_2D, TextureID);
+
+        // Texture dimensions — 256x256 pixels.
+        constexpr int size = 256;
+
+        // Allocate CPU-side pixel buffer.
+        // sz*sz = total pixels, *4 = RGBA (red, green, blue, alpha channels).
+        // Each channel is 1 byte (0-255), so total = 256*256*4 = 262144 bytes.
+        auto* data = new unsigned char[size * size * 4];
+
+        // Fill every pixel with a procedural pattern.
+        // No image file needed — the pattern is computed mathematically.
+        for (int y = 0 ; y < size ; y++) {
+            for (int x = 0 ; x < size ; x++) {
+                // Normalize pixel coordinates to 0.0 - 1.0 range.
+                // fx=0.0 at left edge, fx=1.0 at right edge (same for fy vertically)
+                const float fx = static_cast<float>(x) / size;
+                const float fy = static_cast<float>(y) / size;
+
+                // Noise value — drives the mix between R and G channels.
+                // sin() oscillates between -1 and +1, *0.5+0.5 shifts to 0.0-1.0.
+                // High frequency (20, 10) creates a fine diagonal stripe pattern.
+                float n = sin(fx*20 + fy*10) * 0.5f + 0.5f;
+
+                // Calculate flat array index for this pixel.
+                // Each pixel takes 4 consecutive bytes: [R, G, B, A]
+                // Row y starts at y*sz, pixel x is at offset x, times 4 bytes each.
+                const int i = (y * size + x) * 4;
+
+                // RED channel — sin wave scaled to 0-255, fades with noise n.
+                // When n=1.0 → full red contribution
+                // When n=0.0 → red is zero
+                data[i+0] = static_cast<unsigned char>((sin(fx * 12 + fy * 8) * 127 + 128) * n);
+
+                // GREEN channel — cos wave scaled to 0-255, fades opposite to red.
+                // (1-n) means green is bright where red is dark and vice versa.
+                // Creates a complementary color shift across the texture.
+                data[i+1] = static_cast<unsigned char>((cos(fx * 10 + fy * 12) * 127 + 128) * (1 - n));
+
+                // BLUE channel — independent sin wave, not affected by noise n.
+                // Adds a third color variation layer across the texture.
+                data[i+2] = static_cast<unsigned char>(sin(fx * 8 + fy * 15) * 127 + 128);
+
+                // ALPHA channel — fully opaque, no transparency.
+                data[i+3] = 255;
+            }
+        }
+
+        // Upload the pixel data from CPU memory to GPU texture memory.
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, size, size, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+        // Auto-generate all mipmap levels from the base image just uploaded
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        // Delete CPU side array
+        delete[] data;
+
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    }
+};
+
+/// Creating procedural texture ------------------ (end)
+
 
